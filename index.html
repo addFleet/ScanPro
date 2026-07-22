@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#121417">
+<title>СканПро — Фото в PDF</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#121417;
+    --surface:#1B1F24;
+    --surface2:#262B32;
+    --surface3:#30363F;
+    --accent:#FFB020;
+    --accent-dim:#7A5A1E;
+    --teal:#2DD4BF;
+    --text:#F5F3EF;
+    --muted:#8A8F98;
+    --danger:#F2545B;
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, "Roboto Mono", monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--font-ui);
+    overscroll-behavior:none;
+    display:flex; flex-direction:column;
+    height:100vh; height:100dvh;
+  }
+  button{font-family:inherit; border:none; cursor:pointer; -webkit-appearance:none;}
+  #app{display:flex; flex-direction:column; height:100%; overflow:hidden;}
+
+  /* Header */
+  header{
+    flex:0 0 auto; padding:14px 16px 10px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--surface2);
+  }
+  .brand{display:flex; align-items:center; gap:8px;}
+  .brand-mark{
+    width:22px; height:22px; border-radius:5px; background:linear-gradient(135deg,var(--accent),#ff8a20);
+    position:relative; flex:0 0 auto;
+  }
+  .brand-mark::after{
+    content:""; position:absolute; left:3px; right:3px; top:9px; height:2px; background:var(--bg); opacity:.55;
+  }
+  h1{font-size:15px; font-weight:700; margin:0; letter-spacing:.2px;}
+  .counter{
+    font-family:var(--font-mono); font-size:12px; color:var(--muted); letter-spacing:.5px;
+  }
+  .counter b{color:var(--text); font-weight:600;}
+
+  /* Page strip */
+  #pageStrip{
+    flex:0 0 auto; display:flex; gap:8px; padding:10px 12px; overflow-x:auto;
+    background:var(--surface); border-bottom:1px solid var(--surface2);
+    scrollbar-width:none;
+  }
+  #pageStrip::-webkit-scrollbar{display:none;}
+  .thumb{
+    position:relative; flex:0 0 auto; width:52px; height:70px; border-radius:8px; overflow:hidden;
+    background:var(--surface2); border:2px solid transparent;
+  }
+  .thumb.active{border-color:var(--accent);}
+  .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .thumb .num{
+    position:absolute; left:3px; bottom:3px; font-family:var(--font-mono); font-size:9px;
+    background:rgba(0,0,0,.55); padding:1px 4px; border-radius:3px; color:var(--text);
+  }
+  .thumb.scanning::after{
+    content:""; position:absolute; left:0; right:0; height:3px; top:-3px;
+    background:linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation:sweep .7s ease-in-out;
+  }
+  @keyframes sweep{ from{top:-3px;} to{top:100%;} }
+  .add-thumb{
+    flex:0 0 auto; width:52px; height:70px; border-radius:8px; background:var(--surface2);
+    display:flex; align-items:center; justify-content:center; color:var(--accent); font-size:22px;
+    border:1px dashed var(--surface3);
+  }
+
+  /* Main editor area */
+  main{flex:1 1 auto; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; background:#0c0e10;}
+  #emptyState{
+    text-align:center; color:var(--muted); padding:0 40px; display:flex; flex-direction:column; align-items:center; gap:14px;
+  }
+  #emptyState .glyph{
+    width:64px; height:64px; border-radius:16px; border:2px solid var(--surface3);
+    display:flex; align-items:center; justify-content:center; font-size:28px; color:var(--accent);
+  }
+  #emptyState h2{font-size:16px; color:var(--text); margin:0; font-weight:600;}
+  #emptyState p{font-size:13px; line-height:1.5; margin:0;}
+
+  #canvasWrap{position:relative; width:100%; height:100%; touch-action:none; display:flex; align-items:center; justify-content:center;}
+  #mainCanvas{max-width:100%; max-height:100%; display:block; border-radius:4px;}
+  #cropImg{max-width:100%; max-height:100%; display:block; -webkit-user-select:none; user-select:none; pointer-events:none;}
+
+  /* Crop overlay - viewfinder style */
+  #cropOverlay{position:absolute; touch-action:none;}
+  .crop-shade{position:absolute; background:rgba(0,0,0,.55);}
+  .crop-box{position:absolute; border:1px solid rgba(255,255,255,.85); touch-action:none;}
+  .bracket{
+    position:absolute; width:22px; height:22px; touch-action:none;
+  }
+  .bracket::before, .bracket::after{content:""; position:absolute; background:var(--accent);}
+  .bracket-tl{top:-2px; left:-2px;} .bracket-tl::before{width:22px;height:3px;top:0;left:0;} .bracket-tl::after{width:3px;height:22px;top:0;left:0;}
+  .bracket-tr{top:-2px; right:-2px;} .bracket-tr::before{width:22px;height:3px;top:0;right:0;} .bracket-tr::after{width:3px;height:22px;top:0;right:0;}
+  .bracket-bl{bottom:-2px; left:-2px;} .bracket-bl::before{width:22px;height:3px;bottom:0;left:0;} .bracket-bl::after{width:3px;height:22px;bottom:0;left:0;}
+  .bracket-br{bottom:-2px; right:-2px;} .bracket-br::before{width:22px;height:3px;bottom:0;right:0;} .bracket-br::after{width:3px;height:22px;bottom:0;right:0;}
+
+  /* Filter strip */
+  #filterBar{
+    flex:0 0 auto; display:none; gap:10px; padding:10px 12px; overflow-x:auto; background:var(--surface);
+    border-top:1px solid var(--surface2); scrollbar-width:none;
+  }
+  #filterBar.show{display:flex;}
+  #filterBar::-webkit-scrollbar{display:none;}
+  .filter-chip{
+    flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:5px; background:none; color:var(--muted);
+  }
+  .filter-chip .sw{width:40px; height:40px; border-radius:10px; border:2px solid transparent; background-size:cover; background-position:center;}
+  .filter-chip.active .sw{border-color:var(--accent);}
+  .filter-chip.active{color:var(--text);}
+  .filter-chip span{font-size:10px; letter-spacing:.2px;}
+
+  /* Crop action bar */
+  #cropBar{
+    flex:0 0 auto; display:none; gap:10px; padding:10px 12px 12px; background:var(--surface); border-top:1px solid var(--surface2);
+  }
+  #cropBar.show{display:flex;}
+  #cropBar button{flex:1; padding:11px; border-radius:10px; font-size:13px; font-weight:600;}
+  #cropReset{background:var(--surface2); color:var(--text);}
+  #cropApply{background:var(--accent); color:#1a1200;}
+
+  /* Bottom action bar */
+  #actionBar{
+    flex:0 0 auto; display:flex; gap:8px; padding:10px 12px calc(12px + env(safe-area-inset-bottom));
+    background:var(--surface); border-top:1px solid var(--surface2);
+  }
+  #actionBar.hide{display:none;}
+  .action-btn{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:9px 4px;
+    border-radius:12px; background:var(--surface2); color:var(--text); font-size:10.5px; font-weight:600; letter-spacing:.2px;
+  }
+  .action-btn .ic{font-size:19px;}
+  .action-btn.primary{background:var(--accent); color:#1a1200;}
+  .action-btn:disabled{opacity:.4;}
+  .action-btn.danger{color:var(--danger);}
+
+  #status{
+    position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+    background:var(--surface2); padding:16px 22px; border-radius:12px; font-size:13px; display:none;
+    align-items:center; gap:10px; z-index:50; box-shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+  #status.show{display:flex;}
+  .spin{width:16px; height:16px; border-radius:50%; border:2px solid var(--surface3); border-top-color:var(--accent); animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  input[type=file]{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand"><div class="brand-mark"></div><h1>СканПро</h1></div>
+    <div class="counter" id="counter">0 стр.</div>
+  </header>
+
+  <div id="pageStrip"></div>
+
+  <main id="editorArea">
+    <div id="emptyState">
+      <div class="glyph">▢</div>
+      <h2>Начните скан</h2>
+      <p>Сфотографируйте документ или выберите фото из галереи — соберём их в один PDF.</p>
+    </div>
+    <div id="canvasWrap" style="display:none;">
+      <canvas id="mainCanvas"></canvas>
+      <img id="cropImg" style="display:none;">
+      <div id="cropOverlay" style="display:none;">
+        <div class="crop-shade" id="shadeTop"></div>
+        <div class="crop-shade" id="shadeBottom"></div>
+        <div class="crop-shade" id="shadeLeft"></div>
+        <div class="crop-shade" id="shadeRight"></div>
+        <div class="crop-box" id="cropBox">
+          <div class="bracket bracket-tl" data-h="tl"></div>
+          <div class="bracket bracket-tr" data-h="tr"></div>
+          <div class="bracket bracket-bl" data-h="bl"></div>
+          <div class="bracket bracket-br" data-h="br"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="filterBar"></div>
+  <div id="cropBar">
+    <button id="cropReset">Сбросить</button>
+    <button id="cropApply">Готово</button>
+  </div>
+
+  <div id="actionBar">
+    <button class="action-btn primary" id="btnCapture"><span class="ic">📷</span>Снять</button>
+    <button class="action-btn" id="btnImport"><span class="ic">🖼</span>Галерея</button>
+    <button class="action-btn" id="btnCrop" disabled><span class="ic">✂️</span>Обрезать</button>
+    <button class="action-btn" id="btnFilter" disabled><span class="ic">◐</span>Фильтр</button>
+    <button class="action-btn danger" id="btnDelete" disabled><span class="ic">🗑</span>Удалить</button>
+  </div>
+  <div style="flex:0 0 auto; padding:0 12px calc(10px + env(safe-area-inset-bottom)); background:var(--surface);">
+    <button id="btnExport" class="action-btn primary" disabled style="width:100%; flex-direction:row; padding:13px; border-radius:12px; gap:8px; font-size:14px;">
+      <span class="ic">📄</span> Сохранить и поделиться PDF
+    </button>
+  </div>
+</div>
+
+<input type="file" id="cameraInput" accept="image/*" capture="environment">
+<input type="file" id="galleryInput" accept="image/*" multiple>
+
+<div id="status"><div class="spin"></div><span id="statusText">Обработка…</span></div>
+
+<script>
+(function(){
+  const FILTERS = [
+    {id:'none', label:'Оригинал'},
+    {id:'enhance', label:'Контраст+'},
+    {id:'gray', label:'Серый'},
+    {id:'bw', label:'Ч/Б документ'},
+    {id:'sepia', label:'Сепия'},
+  ];
+
+  let pages = [];
+  let activeIndex = -1;
+  let mode = 'view'; // view | crop | filter
+
+  const $ = id => document.getElementById(id);
+  const pageStrip = $('pageStrip');
+  const emptyState = $('emptyState');
+  const canvasWrap = $('canvasWrap');
+  const mainCanvas = $('mainCanvas');
+  const cropImg = $('cropImg');
+  const cropOverlay = $('cropOverlay');
+  const cropBox = $('cropBox');
+  const filterBar = $('filterBar');
+  const cropBar = $('cropBar');
+  const actionBar = $('actionBar');
+  const counter = $('counter');
+  const statusEl = $('status');
+  const statusText = $('statusText');
+
+  const btnCapture = $('btnCapture');
+  const btnImport = $('btnImport');
+  const btnCrop = $('btnCrop');
+  const btnFilter = $('btnFilter');
+  const btnDelete = $('btnDelete');
+  const btnExport = $('btnExport');
+  const cropReset = $('cropReset');
+  const cropApply = $('cropApply');
+  const cameraInput = $('cameraInput');
+  const galleryInput = $('galleryInput');
+
+  function uid(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+  function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+
+  function showStatus(text){ statusText.textContent = text; statusEl.classList.add('show'); }
+  function hideStatus(){ statusEl.classList.remove('show'); }
+
+  function fileToPage(file){
+    return new Promise((resolve,reject)=>{
+      const reader = new FileReader();
+      reader.onload = e=>{
+        const img = new Image();
+        img.onload = ()=>{
+          const maxDim = 2000;
+          const scale = Math.min(1, maxDim/Math.max(img.naturalWidth, img.naturalHeight));
+          const cw = Math.max(1, Math.round(img.naturalWidth*scale));
+          const ch = Math.max(1, Math.round(img.naturalHeight*scale));
+          const off = document.createElement('canvas');
+          off.width = cw; off.height = ch;
+          off.getContext('2d').drawImage(img,0,0,cw,ch);
+          const dataUrl = off.toDataURL('image/jpeg',0.9);
+          const finalImg = new Image();
+          finalImg.onload = ()=>{
+            resolve({
+              id: uid(), img: finalImg, w: cw, h: ch,
+              crop: {x:0,y:0,w:cw,h:ch}, filter:'none'
+            });
+          };
+          finalImg.onerror = reject;
+          finalImg.src = dataUrl;
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addFiles(fileList, opts){
+    opts = opts || {};
+    const files = Array.from(fileList || []);
+    if(!files.length) return;
+    showStatus('Загрузка фото…');
+    for(const f of files){
+      try{
+        const page = await fileToPage(f);
+        pages.push(page);
+      }catch(err){ console.error('page load failed', err); }
+    }
+    hideStatus();
+    activeIndex = pages.length - 1;
+    mode = 'view';
+    renderAll(true);
+  }
+
+  function renderStrip(){
+    pageStrip.innerHTML = '';
+    pages.forEach((p, i)=>{
+      const t = document.createElement('div');
+      t.className = 'thumb' + (i===activeIndex ? ' active':'');
+      const im = document.createElement('img');
+      im.src = renderPageDataURL(p, 160);
+      const num = document.createElement('div');
+      num.className = 'num'; num.textContent = i+1;
+      t.appendChild(im); t.appendChild(num);
+      t.addEventListener('click', ()=>{ activeIndex = i; mode='view'; renderAll(); });
+      pageStrip.appendChild(t);
+    });
+    const add = document.createElement('div');
+    add.className = 'add-thumb';
+    add.textContent = '+';
+    add.addEventListener('click', ()=> galleryInput.click());
+    pageStrip.appendChild(add);
+    pageStrip.scrollLeft = pageStrip.scrollWidth;
+  }
+
+  function applyFilterToCtx(ctx,w,h,filterId){
+    if(filterId === 'none') return;
+    const imgData = ctx.getImageData(0,0,w,h);
+    const d = imgData.data;
+    if(filterId === 'gray'){
+      for(let i=0;i<d.length;i+=4){
+        const v = 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+        d[i]=d[i+1]=d[i+2]=v;
+      }
+    } else if(filterId === 'bw'){
+      const n = d.length/4;
+      let minV = 255, maxV = 0;
+      for(let i=0;i<d.length;i+=4){
+        const v = 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+        if(v<minV) minV=v;
+        if(v>maxV) maxV=v;
+      }
+      const range = Math.max(1, maxV-minV);
+      const hist = new Uint32Array(256);
+      for(let i=0;i<d.length;i+=4){
+        const v = 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+        const g = clamp(Math.round((v-minV)/range*255),0,255);
+        hist[g]++;
+      }
+      let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
+      let sumB=0, wB=0, varMax=-1, threshold=128;
+      for(let t=0;t<256;t++){
+        wB += hist[t];
+        if(wB===0) continue;
+        const wF = n-wB;
+        if(wF===0) break;
+        sumB += t*hist[t];
+        const mB = sumB/wB, mF = (sum-sumB)/wF;
+        const between = wB*wF*(mB-mF)*(mB-mF);
+        if(between > varMax){ varMax = between; threshold = t; }
+      }
+      for(let i=0;i<d.length;i+=4){
+        const v = 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+        const g = clamp((v-minV)/range*255,0,255);
+        const t = g > threshold ? 255 : 0;
+        d[i]=d[i+1]=d[i+2]=t;
+      }
+    } else if(filterId === 'enhance'){
+      const c = 1.35, b = 18;
+      for(let i=0;i<d.length;i+=4){
+        d[i]  = clamp((d[i]-128)*c+128+b,0,255);
+        d[i+1]= clamp((d[i+1]-128)*c+128+b,0,255);
+        d[i+2]= clamp((d[i+2]-128)*c+128+b,0,255);
+      }
+    } else if(filterId === 'sepia'){
+      for(let i=0;i<d.length;i+=4){
+        const r=d[i], g=d[i+1], b2=d[i+2];
+        d[i]   = clamp(0.393*r+0.769*g+0.189*b2,0,255);
+        d[i+1] = clamp(0.349*r+0.686*g+0.168*b2,0,255);
+        d[i+2] = clamp(0.272*r+0.534*g+0.131*b2,0,255);
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+
+  function renderPageDataURL(page, maxDim){
+    const c = document.createElement('canvas');
+    drawPageToCanvas(page, c, maxDim);
+    return c.toDataURL('image/jpeg',0.85);
+  }
+
+  function drawPageToCanvas(page, canvas, maxDim){
+    const cr = page.crop;
+    let boundW, boundH;
+    if(maxDim && typeof maxDim === 'object'){
+      boundW = maxDim.maxW; boundH = maxDim.maxH;
+    } else {
+      boundW = boundH = (maxDim||2000);
+    }
+    const scale = Math.min(1, boundW/cr.w, boundH/cr.h);
+    const outW = Math.max(1, Math.round(cr.w*scale));
+    const outH = Math.max(1, Math.round(cr.h*scale));
+    canvas.width = outW; canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(page.img, cr.x, cr.y, cr.w, cr.h, 0, 0, outW, outH);
+    applyFilterToCtx(ctx, outW, outH, page.filter);
+    return ctx;
+  }
+
+  function renderMain(){
+    const hasPages = pages.length>0 && activeIndex>=0;
+    emptyState.style.display = hasPages ? 'none':'flex';
+    canvasWrap.style.display = hasPages ? 'flex':'none';
+    btnCrop.disabled = !hasPages;
+    btnFilter.disabled = !hasPages;
+    btnDelete.disabled = !hasPages;
+    btnExport.disabled = pages.length===0;
+    counter.innerHTML = pages.length ? ('<b>'+(activeIndex+1)+'</b> / '+pages.length) : '0 стр.';
+    if(!hasPages) return;
+    const page = pages[activeIndex];
+
+    if(mode === 'crop'){
+      mainCanvas.style.display = 'none';
+      cropImg.style.display = 'block';
+      cropOverlay.style.display = 'block';
+      cropBar.classList.add('show');
+      filterBar.classList.remove('show');
+      cropImg.src = renderFullImageDataURL(page);
+      cropImg.onload = ()=> setupCropBox(page);
+    } else {
+      cropImg.style.display = 'none';
+      cropOverlay.style.display = 'none';
+      cropBar.classList.remove('show');
+      mainCanvas.style.display = 'block';
+      const wrap = canvasWrap;
+      const maxW = wrap.parentElement.clientWidth - 24;
+      const maxH = wrap.parentElement.clientHeight - 24;
+      drawPageToCanvas(page, mainCanvas, {maxW: Math.max(maxW,320), maxH: Math.max(maxH,320)});
+
+      if(mode === 'filter'){
+        filterBar.classList.add('show');
+        renderFilterBar(page);
+      } else {
+        filterBar.classList.remove('show');
+      }
+    }
+  }
+
+  function renderFullImageDataURL(page){
+    const c = document.createElement('canvas');
+    c.width = page.w; c.height = page.h;
+    c.getContext('2d').drawImage(page.img,0,0);
+    return c.toDataURL('image/jpeg',0.92);
+  }
+
+  function renderFilterBar(page){
+    filterBar.innerHTML = '';
+    const thumbC = document.createElement('canvas');
+    const srcCr = page.crop;
+    FILTERS.forEach(f=>{
+      const chip = document.createElement('button');
+      chip.className = 'filter-chip' + (page.filter===f.id ? ' active':'');
+      const sw = document.createElement('div');
+      sw.className = 'sw';
+      thumbC.width = 60; thumbC.height = 60;
+      const tctx = thumbC.getContext('2d');
+      const s = Math.min(60/srcCr.w, 60/srcCr.h);
+      const dw = srcCr.w*s, dh = srcCr.h*s;
+      tctx.clearRect(0,0,60,60);
+      tctx.drawImage(page.img, srcCr.x, srcCr.y, srcCr.w, srcCr.h, (60-dw)/2, (60-dh)/2, dw, dh);
+      applyFilterToCtx(tctx,60,60,f.id);
+      sw.style.backgroundImage = 'url('+thumbC.toDataURL('image/jpeg',0.8)+')';
+      const label = document.createElement('span');
+      label.textContent = f.label;
+      chip.appendChild(sw); chip.appendChild(label);
+      chip.addEventListener('click', ()=>{
+        page.filter = f.id;
+        renderFilterBar(page);
+        drawPageToCanvas(page, mainCanvas, 900);
+        renderStrip();
+      });
+      filterBar.appendChild(chip);
+    });
+  }
+
+  /* ---- Crop tool ---- */
+  let cropState = null;
+  function setupCropBox(page){
+    const rect = cropImg.getBoundingClientRect();
+    const scaleToNatural = page.w / rect.width;
+    cropOverlay.style.width = rect.width+'px';
+    cropOverlay.style.height = rect.height+'px';
+    cropOverlay.style.left = cropImg.offsetLeft+'px';
+    cropOverlay.style.top = cropImg.offsetTop+'px';
+
+    const cr = page.crop;
+    let bx = cr.x/scaleToNatural, by = cr.y/scaleToNatural, bw = cr.w/scaleToNatural, bh = cr.h/scaleToNatural;
+
+    cropState = {containerW: rect.width, containerH: rect.height, scale: scaleToNatural, page};
+    positionCropBox(bx,by,bw,bh);
+  }
+
+  function positionCropBox(x,y,w,h){
+    const minSize = 36;
+    const cw = cropState.containerW, ch = cropState.containerH;
+    w = clamp(w, minSize, cw); h = clamp(h, minSize, ch);
+    x = clamp(x, 0, cw-w); y = clamp(y, 0, ch-h);
+    cropBox.style.left = x+'px'; cropBox.style.top = y+'px';
+    cropBox.style.width = w+'px'; cropBox.style.height = h+'px';
+    $('shadeTop').style.cssText = 'left:0;top:0;width:'+cw+'px;height:'+y+'px;';
+    $('shadeBottom').style.cssText = 'left:0;top:'+(y+h)+'px;width:'+cw+'px;height:'+(ch-y-h)+'px;';
+    $('shadeLeft').style.cssText = 'left:0;top:'+y+'px;width:'+x+'px;height:'+h+'px;';
+    $('shadeRight').style.cssText = 'left:'+(x+w)+'px;top:'+y+'px;width:'+(cw-x-w)+'px;height:'+h+'px;';
+    cropState.box = {x,y,w,h};
+  }
+
+  cropBox.addEventListener('pointerdown', e=>{
+    e.preventDefault();
+    const handle = e.target.dataset.h;
+    const startX = e.clientX, startY = e.clientY;
+    const start = Object.assign({}, cropState.box);
+    cropBox.setPointerCapture(e.pointerId);
+    function move(ev){
+      const dx = ev.clientX-startX, dy = ev.clientY-startY;
+      if(!handle){
+        positionCropBox(start.x+dx, start.y+dy, start.w, start.h);
+      } else {
+        let {x,y,w,h} = start;
+        if(handle==='tl'){ x=start.x+dx; y=start.y+dy; w=start.w-dx; h=start.h-dy; }
+        if(handle==='tr'){ y=start.y+dy; w=start.w+dx; h=start.h-dy; }
+        if(handle==='bl'){ x=start.x+dx; w=start.w-dx; h=start.h+dy; }
+        if(handle==='br'){ w=start.w+dx; h=start.h+dy; }
+        positionCropBox(x,y,w,h);
+      }
+    }
+    function up(ev){
+      cropBox.releasePointerCapture(e.pointerId);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+
+  cropReset.addEventListener('click', ()=>{
+    if(!cropState) return;
+    positionCropBox(0,0,cropState.containerW, cropState.containerH);
+  });
+
+  cropApply.addEventListener('click', ()=>{
+    if(!cropState) return;
+    const {x,y,w,h} = cropState.box;
+    const s = cropState.scale;
+    const page = cropState.page;
+    page.crop = {
+      x: Math.round(x*s), y: Math.round(y*s),
+      w: Math.round(w*s), h: Math.round(h*s)
+    };
+    mode = 'view';
+    renderAll();
+  });
+
+  /* ---- Actions ---- */
+  btnCapture.addEventListener('click', ()=> cameraInput.click());
+  btnImport.addEventListener('click', ()=> galleryInput.click());
+  cameraInput.addEventListener('change', e=> addFiles(e.target.files).then(()=> cameraInput.value=''));
+  galleryInput.addEventListener('change', e=> addFiles(e.target.files).then(()=> galleryInput.value=''));
+
+  btnCrop.addEventListener('click', ()=>{ if(activeIndex<0) return; mode = (mode==='crop') ? 'view':'crop'; renderAll(); });
+  btnFilter.addEventListener('click', ()=>{ if(activeIndex<0) return; mode = (mode==='filter') ? 'view':'filter'; renderAll(); });
+  btnDelete.addEventListener('click', ()=>{
+    if(activeIndex<0) return;
+    pages.splice(activeIndex,1);
+    activeIndex = Math.min(activeIndex, pages.length-1);
+    mode='view';
+    renderAll(true);
+  });
+
+  function renderAll(scrollStrip){
+    renderStrip();
+    renderMain();
+  }
+
+  window.addEventListener('resize', ()=>{ if(mode==='view') renderMain(); });
+
+  /* ---- Export ---- */
+  btnExport.addEventListener('click', async ()=>{
+    if(!pages.length) return;
+    showStatus('Формирую PDF…');
+    try{
+      await new Promise(r=>setTimeout(r,30));
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+      const pageW = 210, pageH = 297, margin = 8;
+      for(let i=0;i<pages.length;i++){
+        const p = pages[i];
+        if(i>0) doc.addPage();
+        doc.setFillColor(255,255,255);
+        doc.rect(0,0,pageW,pageH,'F');
+        const c = document.createElement('canvas');
+        drawPageToCanvas(p, c, 1600);
+        const dataUrl = c.toDataURL('image/jpeg',0.88);
+        const availW = pageW - margin*2, availH = pageH - margin*2;
+        const ratio = c.width/c.height;
+        let w = availW, h = w/ratio;
+        if(h > availH){ h = availH; w = h*ratio; }
+        const x = (pageW-w)/2, y = (pageH-h)/2;
+        doc.addImage(dataUrl,'JPEG', x, y, w, h);
+      }
+      const blob = doc.output('blob');
+      const stamp = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+      const filename = 'Скан_'+stamp+'.pdf';
+      const file = new File([blob], filename, {type:'application/pdf'});
+
+      hideStatus();
+
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        try{
+          await navigator.share({files:[file], title:filename});
+          return;
+        }catch(shareErr){
+          if(shareErr && shareErr.name === 'AbortError') return;
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+    }catch(err){
+      console.error(err);
+      hideStatus();
+      showStatus('Ошибка. Попробуйте ещё раз.');
+      setTimeout(hideStatus, 1800);
+    }
+  });
+
+  renderAll();
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    });
+  }
+})();
+</script>
+</body>
+</html>
