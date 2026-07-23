@@ -902,8 +902,16 @@
       const dateStr = date.toLocaleDateString('ru-RU') + ' ' + date.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
       meta.innerHTML = '<div class="hist-title">'+escapeHtml(rec.title)+'</div><div class="hist-sub">'+rec.pageCount+' стр. · '+dateStr+'</div>';
       const openPdf = ()=>{
+        const isStandalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+        if(isStandalone){
+          shareOrDownloadBlob(rec.blob, rec.title);
+          return;
+        }
         const url = URL.createObjectURL(rec.blob);
-        window.open(url, '_blank');
+        const win = window.open(url, '_blank');
+        if(!win){
+          shareOrDownloadBlob(rec.blob, rec.title);
+        }
         setTimeout(()=> URL.revokeObjectURL(url), 60000);
       };
       img.addEventListener('click', openPdf);
