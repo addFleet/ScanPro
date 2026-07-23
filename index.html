@@ -52,8 +52,14 @@
   }
   h1{font-size:15px; font-weight:700; margin:0; letter-spacing:.2px;}
   .header-right{display:flex; align-items:center; gap:10px;}
-  .header-btn{background:none; color:var(--text); font-size:19px; padding:4px 6px; border-radius:8px; line-height:1;}
+  .header-btn{background:none; color:var(--text); font-size:19px; padding:4px 6px; border-radius:8px; line-height:1; position:relative;}
   .header-btn:active{background:var(--surface2);}
+  .hist-badge{
+    position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 3px; border-radius:8px;
+    background:var(--accent); color:#1a1200; font-family:var(--font-mono); font-size:10px; font-weight:700;
+    display:none; align-items:center; justify-content:center; line-height:1;
+  }
+  .hist-badge.show{display:flex;}
   .counter{
     font-family:var(--font-mono); font-size:12px; color:var(--muted); letter-spacing:.5px;
   }
@@ -72,8 +78,8 @@
   .hist-meta{flex:1 1 auto; min-width:0;}
   .hist-title{font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .hist-sub{font-size:11px; color:var(--muted); margin-top:3px; font-family:var(--font-mono);}
-  .hist-actions{display:flex; gap:6px; flex:0 0 auto;}
-  .hist-btn{width:36px; height:36px; border-radius:10px; background:var(--surface2); color:var(--text); font-size:16px; display:flex; align-items:center; justify-content:center;}
+  .hist-actions{display:flex; gap:5px; flex:0 0 auto;}
+  .hist-btn{width:32px; height:32px; border-radius:9px; background:var(--surface2); color:var(--text); font-size:14px; display:flex; align-items:center; justify-content:center;}
   .hist-btn.danger{color:var(--danger);}
 
   /* Page strip */
@@ -158,14 +164,29 @@
   #cropReset{background:var(--surface2); color:var(--text);}
   #cropApply{background:var(--accent); color:#1a1200;}
 
+  /* Straighten bar */
+  #straightenBar{
+    flex:0 0 auto; display:none; flex-direction:column; gap:8px; padding:12px 14px; background:var(--surface); border-top:1px solid var(--surface2);
+  }
+  #straightenBar.show{display:flex;}
+  .straighten-row{display:flex; align-items:center; gap:10px;}
+  .straighten-label{font-family:var(--font-mono); font-size:13px; color:var(--accent); min-width:44px;}
+  .straighten-row input[type=range]{flex:1; accent-color:var(--accent);}
+  .straighten-actions{display:flex; gap:10px;}
+  .straighten-actions button{flex:1; padding:11px; border-radius:10px; font-size:13px; font-weight:600;}
+  #straightenReset{background:var(--surface2); color:var(--text);}
+  #straightenApply{background:var(--accent); color:#1a1200;}
+
   /* Bottom action bar */
   #actionBar{
     flex:0 0 auto; display:flex; gap:8px; padding:10px 12px calc(12px + env(safe-area-inset-bottom));
     background:var(--surface); border-top:1px solid var(--surface2);
+    overflow-x:auto; scrollbar-width:none;
   }
+  #actionBar::-webkit-scrollbar{display:none;}
   #actionBar.hide{display:none;}
   .action-btn{
-    flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:9px 4px;
+    flex:0 0 auto; width:68px; display:flex; flex-direction:column; align-items:center; gap:4px; padding:9px 4px;
     border-radius:12px; background:var(--surface2); color:var(--text); font-size:10.5px; font-weight:600; letter-spacing:.2px;
   }
   .action-btn .ic{font-size:19px;}
@@ -190,7 +211,7 @@
   <header>
     <div class="brand"><div class="brand-mark"></div><h1>СканПро</h1></div>
     <div class="header-right">
-      <button class="header-btn" id="btnHistory" title="История">🗂</button>
+      <button class="header-btn" id="btnHistory" title="История">🗂<span class="hist-badge" id="histBadge"></span></button>
       <div class="counter" id="counter">0 стр.</div>
     </div>
   </header>
@@ -226,11 +247,23 @@
     <button id="cropReset">Сбросить</button>
     <button id="cropApply">Готово</button>
   </div>
+  <div id="straightenBar">
+    <div class="straighten-row">
+      <span class="straighten-label" id="straightenVal">0.0°</span>
+      <input type="range" id="straightenSlider" min="-15" max="15" step="0.5" value="0">
+    </div>
+    <div class="straighten-actions">
+      <button id="straightenReset">Сбросить</button>
+      <button id="straightenApply">Готово</button>
+    </div>
+  </div>
 
   <div id="actionBar">
     <button class="action-btn primary" id="btnCapture"><span class="ic">📷</span>Снять</button>
     <button class="action-btn" id="btnImport"><span class="ic">🖼</span>Галерея</button>
     <button class="action-btn" id="btnCrop" disabled><span class="ic">✂️</span>Обрезать</button>
+    <button class="action-btn" id="btnRotate" disabled><span class="ic">⟳</span>Повернуть</button>
+    <button class="action-btn" id="btnStraighten" disabled><span class="ic">📐</span>Выровнять</button>
     <button class="action-btn" id="btnFilter" disabled><span class="ic">◐</span>Фильтр</button>
     <button class="action-btn danger" id="btnDelete" disabled><span class="ic">🗑</span>Удалить</button>
   </div>
@@ -288,6 +321,13 @@
   const btnCrop = $('btnCrop');
   const btnFilter = $('btnFilter');
   const btnDelete = $('btnDelete');
+  const btnRotate = $('btnRotate');
+  const btnStraighten = $('btnStraighten');
+  const straightenBar = $('straightenBar');
+  const straightenSlider = $('straightenSlider');
+  const straightenVal = $('straightenVal');
+  const straightenReset = $('straightenReset');
+  const straightenApply = $('straightenApply');
   const btnExport = $('btnExport');
   const cropReset = $('cropReset');
   const cropApply = $('cropApply');
@@ -318,7 +358,7 @@
           finalImg.onload = ()=>{
             resolve({
               id: uid(), img: finalImg, w: cw, h: ch,
-              crop: {x:0,y:0,w:cw,h:ch}, filter:'none'
+              crop: {x:0,y:0,w:cw,h:ch}, filter:'none', straighten:0
             });
           };
           finalImg.onerror = reject;
@@ -436,6 +476,17 @@
     return c.toDataURL('image/jpeg',0.85);
   }
 
+  function drawCropRotated(page, ctx, outW, outH, scale){
+    const cr = page.crop;
+    const fine = page.straighten||0;
+    ctx.save();
+    ctx.translate(outW/2, outH/2);
+    ctx.rotate(fine*Math.PI/180);
+    const dw = cr.w*scale, dh = cr.h*scale;
+    ctx.drawImage(page.img, cr.x, cr.y, cr.w, cr.h, -dw/2, -dh/2, dw, dh);
+    ctx.restore();
+  }
+
   function drawPageToCanvas(page, canvas, maxDim){
     const cr = page.crop;
     let boundW, boundH;
@@ -449,7 +500,8 @@
     const outH = Math.max(1, Math.round(cr.h*scale));
     canvas.width = outW; canvas.height = outH;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(page.img, cr.x, cr.y, cr.w, cr.h, 0, 0, outW, outH);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,outW,outH);
+    drawCropRotated(page, ctx, outW, outH, scale);
     applyFilterToCtx(ctx, outW, outH, page.filter);
     return ctx;
   }
@@ -461,6 +513,8 @@
     btnCrop.disabled = !hasPages;
     btnFilter.disabled = !hasPages;
     btnDelete.disabled = !hasPages;
+    btnRotate.disabled = !hasPages;
+    btnStraighten.disabled = !hasPages;
     btnExport.disabled = pages.length===0;
     counter.innerHTML = pages.length ? ('<b>'+(activeIndex+1)+'</b> / '+pages.length) : '0 стр.';
     if(!hasPages) return;
@@ -472,6 +526,7 @@
       cropOverlay.style.display = 'block';
       cropBar.classList.add('show');
       filterBar.classList.remove('show');
+      straightenBar.classList.remove('show');
       cropImg.src = renderFullImageDataURL(page);
       cropImg.onload = ()=> setupCropBox(page);
     } else {
@@ -486,9 +541,14 @@
 
       if(mode === 'filter'){
         filterBar.classList.add('show');
+        straightenBar.classList.remove('show');
         renderFilterBar(page);
+      } else if(mode === 'straighten'){
+        filterBar.classList.remove('show');
+        straightenBar.classList.add('show');
       } else {
         filterBar.classList.remove('show');
+        straightenBar.classList.remove('show');
       }
     }
   }
@@ -496,7 +556,9 @@
   function renderFullImageDataURL(page){
     const c = document.createElement('canvas');
     c.width = page.w; c.height = page.h;
-    c.getContext('2d').drawImage(page.img,0,0);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(page.img,0,0);
+    applyFilterToCtx(ctx, page.w, page.h, page.filter);
     return c.toDataURL('image/jpeg',0.92);
   }
 
@@ -512,9 +574,9 @@
       thumbC.width = 60; thumbC.height = 60;
       const tctx = thumbC.getContext('2d');
       const s = Math.min(60/srcCr.w, 60/srcCr.h);
-      const dw = srcCr.w*s, dh = srcCr.h*s;
       tctx.clearRect(0,0,60,60);
-      tctx.drawImage(page.img, srcCr.x, srcCr.y, srcCr.w, srcCr.h, (60-dw)/2, (60-dh)/2, dw, dh);
+      tctx.fillStyle = '#ffffff'; tctx.fillRect(0,0,60,60);
+      drawCropRotated(page, tctx, 60, 60, s);
       applyFilterToCtx(tctx,60,60,f.id);
       sw.style.backgroundImage = 'url('+thumbC.toDataURL('image/jpeg',0.8)+')';
       const label = document.createElement('span');
@@ -615,6 +677,101 @@
 
   btnCrop.addEventListener('click', ()=>{ if(activeIndex<0) return; mode = (mode==='crop') ? 'view':'crop'; renderAll(); });
   btnFilter.addEventListener('click', ()=>{ if(activeIndex<0) return; mode = (mode==='filter') ? 'view':'filter'; renderAll(); });
+  function bakeRotation(page, angleDeg){
+    return new Promise((resolve,reject)=>{
+      try{
+        const oldW = page.w, oldH = page.h;
+        const th = angleDeg*Math.PI/180;
+        const newW = Math.max(1, Math.round(Math.abs(oldW*Math.cos(th)) + Math.abs(oldH*Math.sin(th))));
+        const newH = Math.max(1, Math.round(Math.abs(oldW*Math.sin(th)) + Math.abs(oldH*Math.cos(th))));
+        const off = document.createElement('canvas');
+        off.width = newW; off.height = newH;
+        const octx = off.getContext('2d');
+        octx.fillStyle = '#ffffff'; octx.fillRect(0,0,newW,newH);
+        octx.translate(newW/2, newH/2);
+        octx.rotate(th);
+        octx.drawImage(page.img, -oldW/2, -oldH/2, oldW, oldH);
+        const dataUrl = off.toDataURL('image/jpeg', 0.92);
+        const im = new Image();
+        im.onload = ()=>{
+          const cr = page.crop;
+          const corners = [
+            [cr.x, cr.y], [cr.x+cr.w, cr.y], [cr.x, cr.y+cr.h], [cr.x+cr.w, cr.y+cr.h]
+          ].map(([px,py])=>{
+            const rx = px - oldW/2, ry = py - oldH/2;
+            const nx = rx*Math.cos(th) - ry*Math.sin(th);
+            const ny = rx*Math.sin(th) + ry*Math.cos(th);
+            return [nx + newW/2, ny + newH/2];
+          });
+          const xs = corners.map(c=>c[0]), ys = corners.map(c=>c[1]);
+          const minX = Math.max(0, Math.min(...xs)), minY = Math.max(0, Math.min(...ys));
+          const maxX = Math.min(newW, Math.max(...xs)), maxY = Math.min(newH, Math.max(...ys));
+          page.img = im;
+          page.w = newW; page.h = newH;
+          page.crop = { x:minX, y:minY, w:Math.max(1,maxX-minX), h:Math.max(1,maxY-minY) };
+          page.straighten = 0;
+          resolve();
+        };
+        im.onerror = reject;
+        im.src = dataUrl;
+      }catch(err){ reject(err); }
+    });
+  }
+
+  btnRotate.addEventListener('click', async ()=>{
+    if(activeIndex<0) return;
+    showStatus('Поворачиваю…');
+    try{
+      await bakeRotation(pages[activeIndex], 90);
+      hideStatus();
+      renderAll();
+    }catch(err){
+      console.error('rotate failed', err);
+      hideStatus();
+      showStatus('Не удалось повернуть');
+      setTimeout(hideStatus, 1500);
+    }
+  });
+  btnStraighten.addEventListener('click', ()=>{
+    if(activeIndex<0) return;
+    mode = (mode==='straighten') ? 'view' : 'straighten';
+    if(mode==='straighten'){
+      const v = pages[activeIndex].straighten || 0;
+      straightenSlider.value = v;
+      straightenVal.textContent = v.toFixed(1)+'°';
+    }
+    renderAll();
+  });
+  straightenSlider.addEventListener('input', ()=>{
+    if(activeIndex<0) return;
+    const v = parseFloat(straightenSlider.value);
+    straightenVal.textContent = v.toFixed(1)+'°';
+    pages[activeIndex].straighten = v;
+    const wrap = canvasWrap;
+    const maxW = wrap.parentElement.clientWidth - 24;
+    const maxH = wrap.parentElement.clientHeight - 24;
+    drawPageToCanvas(pages[activeIndex], mainCanvas, {maxW: Math.max(maxW,320), maxH: Math.max(maxH,320)});
+  });
+  straightenReset.addEventListener('click', ()=>{
+    if(activeIndex<0) return;
+    pages[activeIndex].straighten = 0;
+    straightenSlider.value = 0;
+    straightenVal.textContent = '0.0°';
+    renderMain();
+  });
+  straightenApply.addEventListener('click', async ()=>{
+    if(activeIndex<0){ mode='view'; renderAll(); return; }
+    const page = pages[activeIndex];
+    const angle = page.straighten||0;
+    if(Math.abs(angle) > 0.01){
+      showStatus('Применяю выравнивание…');
+      try{ await bakeRotation(page, angle); }
+      catch(err){ console.error('straighten bake failed', err); }
+      hideStatus();
+    }
+    mode = 'view';
+    renderAll();
+  });
   btnDelete.addEventListener('click', ()=>{
     if(activeIndex<0) return;
     pages.splice(activeIndex,1);
@@ -673,6 +830,30 @@
     });
   }
   function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+  const histBadge = $('histBadge');
+  async function updateHistoryBadge(){
+    try{
+      const items = await getAllScans();
+      if(items.length){ histBadge.textContent = items.length > 99 ? '99+' : String(items.length); histBadge.classList.add('show'); }
+      else{ histBadge.classList.remove('show'); }
+    }catch(e){ /* ignore */ }
+  }
+
+  function downloadBlob(blob, filename){
+    try{
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+      showStatus('Сохранено в Загрузки');
+      setTimeout(hideStatus, 1500);
+    }catch(dlErr){
+      console.error('download failed', dlErr);
+      showStatus('Не удалось сохранить файл');
+      setTimeout(hideStatus, 1800);
+    }
+  }
 
   async function shareOrDownloadBlob(blob, filename){
     const file = new File([blob], filename, {type:'application/pdf'});
@@ -680,11 +861,19 @@
       try{ await navigator.share({files:[file], title:filename}); return; }
       catch(shareErr){ if(shareErr && shareErr.name === 'AbortError') return; }
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(()=> URL.revokeObjectURL(url), 4000);
+    try{
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+      showStatus('Сохранено в Загрузки');
+      setTimeout(hideStatus, 1500);
+    }catch(dlErr){
+      console.error('download failed', dlErr);
+      showStatus('Не удалось сохранить файл');
+      setTimeout(hideStatus, 1800);
+    }
   }
 
   const historyView = $('historyView');
@@ -712,12 +901,27 @@
       const date = new Date(rec.createdAt);
       const dateStr = date.toLocaleDateString('ru-RU') + ' ' + date.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
       meta.innerHTML = '<div class="hist-title">'+escapeHtml(rec.title)+'</div><div class="hist-sub">'+rec.pageCount+' стр. · '+dateStr+'</div>';
+      const openPdf = ()=>{
+        const url = URL.createObjectURL(rec.blob);
+        window.open(url, '_blank');
+        setTimeout(()=> URL.revokeObjectURL(url), 60000);
+      };
+      img.addEventListener('click', openPdf);
+      meta.addEventListener('click', openPdf);
       const actions = document.createElement('div'); actions.className = 'hist-actions';
       const shareBtn = document.createElement('button'); shareBtn.className = 'hist-btn'; shareBtn.textContent = '↗';
+      shareBtn.title = 'Поделиться';
       shareBtn.addEventListener('click', ()=> shareOrDownloadBlob(rec.blob, rec.title));
+      const dlBtn = document.createElement('button'); dlBtn.className = 'hist-btn'; dlBtn.textContent = '⬇';
+      dlBtn.title = 'Скачать';
+      dlBtn.addEventListener('click', ()=> downloadBlob(rec.blob, rec.title));
       const delBtn = document.createElement('button'); delBtn.className = 'hist-btn danger'; delBtn.textContent = '🗑';
-      delBtn.addEventListener('click', async ()=>{ await deleteScanRecord(rec.id); openHistory(); });
-      actions.appendChild(shareBtn); actions.appendChild(delBtn);
+      delBtn.title = 'Удалить';
+      delBtn.addEventListener('click', async ()=>{
+        if(!confirm('Удалить «'+rec.title+'»? Это необратимо.')) return;
+        await deleteScanRecord(rec.id); openHistory(); updateHistoryBadge();
+      });
+      actions.appendChild(shareBtn); actions.appendChild(dlBtn); actions.appendChild(delBtn);
       row.appendChild(img); row.appendChild(meta); row.appendChild(actions);
       historyList.appendChild(row);
     });
@@ -761,6 +965,7 @@
           thumb: renderPageDataURL(pages[0], 200),
           blob: blob
         });
+        updateHistoryBadge();
       }catch(saveErr){ console.error('history save failed', saveErr); }
 
       hideStatus();
@@ -774,6 +979,7 @@
   });
 
   renderAll();
+  updateHistoryBadge();
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
